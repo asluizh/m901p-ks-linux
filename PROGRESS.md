@@ -105,3 +105,18 @@
     main 04 ff 00 00 13 ff 40 00 55 01 54 / copy 01 ff 00 00 96 ff c0 00 55 ff ff).
   - => NO 7 on-board profile slots. Profiles are likely host-side (Windows app rewrites the single config).
   - Next: log HID reports + re-read 0x0000-0x0300 while user presses the dedicated profile button.
+- PROFILE BUTTON (underside) press #1: mouse sends unsolicited input report 09 0a 00 00 00 0a 86 00 88 (cmd 0x0a).
+  EEPROM: active config 0x0000 byte0 01->08 and 0xa0 block changed (= old copy at 0x2500); old active (byte0 01)
+  saved to 0x1b00; 0x2500 erased. => ON-BOARD PROFILES, swapped into 0x0000. Stored at 0x1b00+ (above macros).
+  Snapshots: work/snap_before.bin, work/snap_after.bin, work/after_press1.bin (full 16K after press).
+- PROFILE BUTTON x8 (tools/profwatch.py): only TWO states toggle. A: byte0=01, a0=04 ff 00 00 13 ff 40 00 55 01 54,
+  notify byte 01, B stored at 0x2500. B: byte0=08, a0=01 ff 00 00 96 ff c0 00 55 ff ff, notify 0x88, A stored at 0x1b00.
+  Scroll-wheel LED blinks on each press. Ended in state B (byte0=08) — factory was A.
+- NOTIFY decode (driver @0x4421e0 -> PostMessage 0x7eb -> OnDeviceBehavior @0x431420): report 9 cmd 0x0a,
+  byte6 = flags: 0x01 -> DPI level (byte7) ; 0x02 -> POLLING RATE (byte8 & 0xf) ; 0x04 -> reset notify ;
+  0x20/0x40/0x80 -> byte8 bits 5/6/7 (events 4/5/6, unknown).
+- POLLING RATE code (@0x40e9c0): 1=1000 Hz, 2=500, 4=250, 8=125. EEPROM byte 0x00 = rate code, 0x01 = 0x55-code.
+  Factory profile A = 01 (1000 Hz); profile B (stored at 0x2500 at factory) = 08 (125 Hz).
+- So the underside button = 2-PROFILE TOGGLE (A home 0x1b00, B home 0x2500), each a full config (rate, DPI, keys, 0xa0).
+  No evidence of 7 on-board profiles; driver never sends a profile command. Currently active: B (125 Hz).
+- Next tests: (1) measure motion report rate per profile (read-only); (2) per-profile keymap persistence (needs a write).
