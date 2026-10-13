@@ -128,3 +128,11 @@
   Inactive profile = the one whose home slot is non-empty; can be edited directly in its slot.
   Macros (0x300-0x1b00) are OUTSIDE the slots -> shared by both profiles. Button 12 restored to kp- (A active).
 - Next: implement --profile A|B (edit active area or the stored slot) and `rate` command (byte 0x00/0x01).
+- PROFILE FEATURE TEST: wrote B btn12=f24, B rate 500, A(active) rate 250. Restore: set 12 key:kp- -p B; rate 125 -p B; rate 1000 -p A
+- PROFILE FEATURE TEST RESULT: editing stored profile's BUTTONS in its slot works (B loaded with f24).
+  Rate write to ACTIVE profile (byte 0) applies IMMEDIATELY (A ~800/s -> ~260/s at 250 Hz).
+  Rate write to STORED slot does NOT take effect: B loaded byte0=500 Hz but ran/reported 125 Hz (firmware keeps
+  per-profile rate elsewhere, probably RAM). => `rate` restricted to the active profile. Test changes restored.
+- IMPLEMENTED: `profile`, `rate [HZ]` (active profile only), `-p/--profile A|B` for show/set/macro,
+  macro `--slot`/`--force` with cross-profile slot-conflict check. backup default now full 16 KB.
+  Verified on device; mouse restored to factory (work/factory-full.bin = full 16 KB factory image).

@@ -1,7 +1,7 @@
 # Redragon M901P-KS on Linux
 
 The mouse already works as a normal mouse and keyboard on Linux. `m901.py` reprograms its on-board
-button mapping and macros. They are stored in the mouse, so they keep working without any software running,
+button mapping, macros, profiles and polling rate. They are stored in the mouse, so they keep working without any software running,
 on any computer.
 
 Supported device: Redragon M901P-KS via its 2.4G receiver (USB `25a7:fa07`). The wired ID `25a7:fa08` is
@@ -20,6 +20,8 @@ is never applied.
 **Back up your current configuration before changing anything:**
 
     ./m901.py backup m901-factory.bin
+
+This saves the whole 16 KB memory, including both profiles. It takes about 10 seconds.
 
 ## Buttons
 
@@ -43,6 +45,22 @@ is never applied.
     ./m901.py set 12 disable
     ./m901.py keys                       # list every key/action name
 
+## Profiles and polling rate
+
+The mouse has **two profiles**. The button on the underside switches between them, and the scroll-wheel LED
+blinks to confirm. Each profile has its own button mapping and polling rate. Factory settings: profile A at
+1000 Hz, profile B at 125 Hz. There is no software command to switch profiles; only the button does it.
+
+    ./m901.py profile                    # which profile is active, and both rates
+    ./m901.py show -p B                  # mapping of profile B, even while A is active
+    ./m901.py set 1 key:f13 -p B         # change a button in profile B
+    ./m901.py rate                       # polling rate of the active profile
+    ./m901.py rate 500                   # 125, 250, 500 or 1000 Hz; applies immediately
+
+- Without `-p`, `show`, `set` and `macro` act on the active profile.
+- `rate` only works on the active profile, because the mouse ignores rate changes written to the stored one.
+  Switch to the profile first.
+
 ## Macros
 
     ./m901.py macro 5 'ctrl+a 50 ctrl+c'                 # select all, wait 50 ms, copy
@@ -63,6 +81,10 @@ Script tokens, separated by spaces or commas:
 - Each step waits 20 ms by default (change with `--delay`).
 - Up to 70 steps.
 - Right-hand modifiers (`rctrl`, `rshift`, `ralt`) work in macros.
+
+Macros are stored in 16 slots shared by both profiles. By default, a button uses the slot with its own number. If
+that slot is already used by the same button in the other profile, the tool refuses rather than overwrite it.
+Pick another slot with `--slot N`, for example `./m901.py macro 12 -p A --slot 3 'f24'`.
 
 Playback modes:
 
@@ -85,8 +107,7 @@ Playback modes:
 
 ## Not supported yet
 
-DPI levels, lighting, and polling rate. The DPI and lighting data are partly located in the mouse's memory;
-see the protocol notes.
+DPI levels and lighting. Their data is partly located in the mouse's memory; see the protocol notes.
 
 ## How it works
 

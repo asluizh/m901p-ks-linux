@@ -32,7 +32,15 @@ ADDR_DPI_COLOR = 0x2C
 ADDR_MATRIX = 0x60
 ADDR_KEYDATA = 0x100       # + 0x20 * matrix index
 MACRO_ADDRS = [0x300 + 0x180 * i for i in range(16)]
-EEPROM_DUMP_END = 0x1B00   # last macro block (0x1980) + 0x180
+EEPROM_DUMP_END = 0x4000   # 16 KB EEPROM; higher addresses mirror it
+
+# Two on-board profiles, toggled by the button under the mouse. The active one lives at 0x0000-0x0300; the
+# inactive one is stored in its home slot (same layout), and the active profile's home slot is left erased.
+PROFILE_SIZE = 0x300
+PROFILE_HOME = {"A": 0x1B00, "B": 0x2500}
+ADDR_RATE = 0x00           # polling-rate code + checksum
+RATES = {1000: 0x01, 500: 0x02, 250: 0x04, 125: 0x08}
+RATE_NAMES = {c: hz for hz, c in RATES.items()}
 
 # Physical button number (as in the Windows UI: 1-12 side grid, 13 L, 14 R, 15 M, 16 fire)
 # -> index in the on-board key matrix.
@@ -437,6 +445,37 @@ def describe_repeat(rr):
 
 # ---------------------------------------------------------------- commands
 
+def active_profile(m):
+    """The active profile's home slot is erased; the other one holds the stored profile."""
+    empty = {p for p, a in PROFILE_HOME.items() if m.read(a, 2) == b"\xff\xff"}
+    if len(empty) != 1:
+        raise IOError(f"cannot tell which profile is active (erased home slots: {sorted(empty) or 'none'})")
+    return empty.pop()
+
+
+def profile_base(m, profile):
+    """Return (name, base address) for the requested profile; None means the active one."""
+    act = active_profile(m)
+    p = (profile or act).upper()
+    return p, (0 if p == act else PROFILE_HOME[p])
+
+
+def profile_label(m, name, base):
+    return f"profile {name} ({'active' if base == 0 else 'stored'})"
+
+
+def macro_users(m, slot):
+    """(profile, button) pairs whose button entry points at macro slot `slot`."""
+    users = []
+    for p in PROFILE_HOME:
+        _, base = profile_base(m, p)
+        matrix = m.read(base + ADDR_MATRIX, 64)
+        for btn, idx in BUTTON_TO_MATRIX.items():
+            if matrix[4 * idx] == 0x06 and matrix[4 * idx + 1] == slot:
+                users.append((p, btn))
+    return users
+
+
 def resolve_button(b):
     b = b.lower()
     if b in BUTTON_ALIASES:
@@ -448,11 +487,14 @@ def resolve_button(b):
 
 
 def cmd_show(m, args):
-    matrix = m.read(ADDR_MATRIX, 64)
+    name, base = profile_base(m, args.profile)
+    rate = m.read(base + ADDR_RATE, 1)[0]
+    print(f"{profile_label(m, name, base)}, polling rate {RATE_NAMES.get(rate, f'code {rate:#x}')} Hz")
+    matrix = m.read(base + ADDR_MATRIX, 64)
     for btn in sorted(BUTTON_TO_MATRIX):
         idx = BUTTON_TO_MATRIX[btn]
         e = matrix[idx * 4:idx * 4 + 4]
-        kd = m.read(ADDR_KEYDATA + 0x20 * idx, 0x20) if e[0] == 0x05 else None
+        kd = m.read(base + ADDR_KEYDATA + 0x20 * idx, 0x20) if e[0] == 0x05 else None
         label = {13: "left", 14: "right", 15: "middle", 16: "fire"}.get(btn, f"side {btn}")
         print(f"button {btn:2d} ({label:7s}) [{e.hex(' ')}]  {describe_entry(e, kd)}")
         if e[0] == 0x06 and e[1] < len(MACRO_ADDRS):
@@ -464,11 +506,12 @@ def cmd_set(m, args):
     btn = resolve_button(args.button)
     idx = BUTTON_TO_MATRIX[btn]
     e, kd = parse_action(args.action)
+    name, base = profile_base(m, args.profile)
     if kd is not None:
         # pad the 32-byte slot with 0xff (erased state) so no stale bytes from a longer old entry remain
-        m.write(ADDR_KEYDATA + 0x20 * idx, kd.ljust(0x20, b"\xff"))
-    m.write(ADDR_MATRIX + 4 * idx, e)
-    print(f"button {btn} -> {args.action}  (matrix[{idx}] = {e.hex(' ')}"
+        m.write(base + ADDR_KEYDATA + 0x20 * idx, kd.ljust(0x20, b"\xff"))
+    m.write(base + ADDR_MATRIX + 4 * idx, e)
+    print(f"{profile_label(m, name, base)}: button {btn} -> {args.action}  (matrix[{idx}] = {e.hex(' ')}"
           + (f", keydata = {kd.hex(' ')}" if kd else "") + ")")
 
 
@@ -487,16 +530,54 @@ def cmd_macro(m, args):
         if not 1 <= args.repeat <= 0xFD:
             raise ValueError("--repeat must be 1..253")
         rr = args.repeat
+    name_p, base = profile_base(m, args.profile)
+    # macro slots are shared by both profiles; by default use the button's matrix index like the driver does
+    slot = idx if args.slot is None else args.slot
+    if not 0 <= slot < len(MACRO_ADDRS):
+        raise ValueError(f"--slot must be 0..{len(MACRO_ADDRS) - 1}")
+    others = [u for u in macro_users(m, slot) if u != (name_p, btn)]
+    if others and not args.force:
+        used = ", ".join(f"profile {p} button {b}" for p, b in others)
+        raise ValueError(f"macro slot {slot} is already used by {used}; pick a free one with --slot "
+                         f"(or --force to overwrite it for both)")
     blob = macro_block(events, args.name)
     if args.verbose:
         print("macro block:", blob.hex(" "), file=sys.stderr)
     # fill the rest of the slot with 0xff (erased state) so nothing from an older, longer macro remains
-    m.write(MACRO_ADDRS[idx], blob.ljust(0x180, b"\xff"))
-    # byte 1 = macro slot; the driver uses the button's matrix index (OemDrv.exe @0x40b97a)
-    e = entry(0x06, idx, rr)
-    m.write(ADDR_MATRIX + 4 * idx, e)
+    m.write(MACRO_ADDRS[slot], blob.ljust(0x180, b"\xff"))
+    # byte 1 = macro slot (the driver always uses the button's matrix index, OemDrv.exe @0x40b97a)
+    e = entry(0x06, slot, rr)
+    m.write(base + ADDR_MATRIX + 4 * idx, e)
     name, script = describe_macro(blob)
-    print(f"button {btn} -> macro '{name}' ({describe_repeat(rr)}, {len(events)} events): {script}")
+    print(f"{profile_label(m, name_p, base)}: button {btn} -> macro slot {slot} '{name}' "
+          f"({describe_repeat(rr)}, {len(events)} events): {script}")
+
+
+def cmd_rate(m, args):
+    name, base = profile_base(m, args.profile)
+    if args.hz is None:
+        code = m.read(base + ADDR_RATE, 1)[0]
+        print(f"{profile_label(m, name, base)}: {RATE_NAMES.get(code, f'unknown code {code:#x}')} Hz")
+        return
+    if args.hz not in RATES:
+        raise ValueError(f"rate must be one of {sorted(RATES)}")
+    if base != 0:
+        # verified: the firmware ignores a rate written into a stored profile's slot and keeps the old one
+        raise ValueError(f"profile {name} is not active; switch to it with the button under the mouse first "
+                         "(the mouse ignores rate changes to a stored profile)")
+    code = RATES[args.hz]
+    m.write(ADDR_RATE, bytes([code, chk([code])]))
+    print(f"{profile_label(m, name, base)}: polling rate -> {args.hz} Hz (applies immediately)")
+
+
+def cmd_profile(m, args):
+    act = active_profile(m)
+    for p in PROFILE_HOME:
+        _, base = profile_base(m, p)
+        code = m.read(base + ADDR_RATE, 1)[0]
+        print(f"profile {p}: {'ACTIVE' if p == act else 'stored at 0x%04x' % PROFILE_HOME[p]}, "
+              f"{RATE_NAMES.get(code, f'code {code:#x}')} Hz")
+    print("switch with the button under the mouse (there is no software command for it)")
 
 
 def cmd_dump(m, args):
@@ -547,12 +628,19 @@ def main():
     p.add_argument("-v", "--verbose", action="store_true", help="print raw reports")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="list detected hidraw nodes")
-    sub.add_parser("show", help="show current button mapping")
+    s = sub.add_parser("show", help="show button mapping of a profile (default: the active one)")
+    s.add_argument("-p", "--profile", type=str.upper, choices=list(PROFILE_HOME))
+    sub.add_parser("profile", help="show both profiles and which one is active")
+    s = sub.add_parser("rate", help="show or set the polling rate of a profile")
+    s.add_argument("hz", nargs="?", type=int, help="125, 250, 500 or 1000")
+    s.add_argument("-p", "--profile", type=str.upper, choices=list(PROFILE_HOME))
     s = sub.add_parser("set", help="remap a button",
                        epilog="actions: key:ctrl+c, key:f5, media:volup, left/right/middle/back/forward, "
                               "dpi-up, dpi-down, dpi-loop, disable, fire:INTERVAL,REPEAT (factory fire:20,3), raw:b0,b1,b2")
     s.add_argument("button", help="1-12 (side grid), 13/left, 14/right, 15/middle, 16/fire")
     s.add_argument("action")
+    s.add_argument("-p", "--profile", type=str.upper, choices=list(PROFILE_HOME),
+                   help="profile to change (default: the active one)")
     s = sub.add_parser("macro", help="assign a macro to a button", formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="script tokens: a (tap), ctrl+c (combo tap), +a (press), -a (release),\n"
                               "mouse:left|right|middle|back|forward, 150 or 150ms (pause after previous event)\n"
@@ -561,6 +649,10 @@ def main():
     s.add_argument("script", nargs="*", help="macro script (or use -f)")
     s.add_argument("-f", "--file", help="read the script from a file")
     s.add_argument("--name", default="macro", help="macro name stored on the mouse (max 15 chars)")
+    s.add_argument("-p", "--profile", type=str.upper, choices=list(PROFILE_HOME),
+                   help="profile whose button to assign (default: the active one)")
+    s.add_argument("--slot", type=int, help="macro slot 0-15, shared by both profiles (default: the button's own)")
+    s.add_argument("--force", action="store_true", help="overwrite a macro slot used by another button")
     s.add_argument("--delay", type=int, default=20, help="default pause after each event in ms (default 20)")
     g = s.add_mutually_exclusive_group()
     g.add_argument("--repeat", type=int, default=1, help="play N times (default 1)")
@@ -587,7 +679,7 @@ def main():
         return
     m = Mouse(args.device, args.verbose)
     try:
-        {"show": cmd_show, "set": cmd_set, "macro": cmd_macro, "dump": cmd_dump, "backup": cmd_backup,
+        {"show": cmd_show, "set": cmd_set, "macro": cmd_macro, "rate": cmd_rate, "profile": cmd_profile, "dump": cmd_dump, "backup": cmd_backup,
          "restore": cmd_restore, "write": cmd_writeraw, "raw": cmd_raw}[args.cmd](m, args)
     except ValueError as e:
         sys.exit(str(e))
