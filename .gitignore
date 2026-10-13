@@ -1,0 +1,6 @@
+# vendor installer (proprietary) and everything extracted from it, plus local EEPROM backups
+*.exe
+work/
+*.bin
+.venv/
+__pycache__/

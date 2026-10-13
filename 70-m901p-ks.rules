@@ -1,0 +1,3 @@
+# Redragon M901P-KS (Compx 2.4G receiver / wired): allow logged-in user access to hidraw
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="25a7", ATTRS{idProduct}=="fa07", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="25a7", ATTRS{idProduct}=="fa08", TAG+="uaccess"
