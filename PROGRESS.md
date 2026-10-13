@@ -97,3 +97,11 @@
 - FE TEST RESULT: 0xfe = LOOP WHILE HELD (13 f24 taps over 2 s hold, stopped on release). Tool: --while-held = 0xfe,
   --until-key = 0xff (with warning). Button 12 + slot 15 restored, EEPROM identical to factory again.
 - SHIPPED initial state: git repo initialized, first commit on main (local only, no remote).
+- PUSHED to github: git@github.com:asluizh/m901p-ks-linux (public, main). License GPL-2.0-or-later. SSH: ~/.ssh/config uses ~/.ssh/github (passphrase; needs ssh-add).
+- PROFILES INVESTIGATION (read-only full dump, tools/fulldump.py -> work/high.bin):
+  - EEPROM is 16 KB, addresses mirror every 0x4000.
+  - Only 2 used areas: main config 0x0000-0x0300 and a near-identical copy at 0x2500-0x2800
+    (probably factory-default image). Diffs: byte 0 (main 01 / copy 08, + chk), and 0x0a0-0x0aa (unknown settings;
+    main 04 ff 00 00 13 ff 40 00 55 01 54 / copy 01 ff 00 00 96 ff c0 00 55 ff ff).
+  - => NO 7 on-board profile slots. Profiles are likely host-side (Windows app rewrites the single config).
+  - Next: log HID reports + re-read 0x0000-0x0300 while user presses the dedicated profile button.
