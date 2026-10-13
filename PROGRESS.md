@@ -122,3 +122,9 @@
 - Next tests: (1) measure motion report rate per profile (read-only); (2) per-profile keymap persistence (needs a write).
 - TEST 1 DONE (tools/ratemeter.py): profile B (code 8) = steady 130-132 reports/s ; profile A (code 1) = 656-808/s while
   moving. Polling-rate decode CONFIRMED. Profile currently active after test: B (125 Hz).
+- TEST 2 in progress: profile A active, button 12 set to key:f24 (restore: set 12 key:kp- in BOTH profiles if needed)
+- TEST 2 RESULT: per-profile button tables. Change in active area is saved to the profile's home slot on switch
+  (A -> 0x1b00, B -> 0x2500) and restored on switch back. Slot layout = same as 0x0000-0x0300.
+  Inactive profile = the one whose home slot is non-empty; can be edited directly in its slot.
+  Macros (0x300-0x1b00) are OUTSIDE the slots -> shared by both profiles. Button 12 restored to kp- (A active).
+- Next: implement --profile A|B (edit active area or the stored slot) and `rate` command (byte 0x00/0x01).
