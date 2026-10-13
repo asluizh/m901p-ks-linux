@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 import os, fcntl, select, time, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
 import importlib.util

@@ -93,3 +93,7 @@ see the protocol notes.
 The protocol was reverse-engineered from the vendor's Windows app (`OemDrv.exe`) and verified on the mouse.
 See [PROGRESS.md](PROGRESS.md) for the protocol, the EEPROM map, the driver code addresses and the test log.
 The helper scripts used are in `tools/`.
+
+## License
+
+GPL-2.0-or-later. See [LICENSE](LICENSE).

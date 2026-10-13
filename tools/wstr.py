@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 import pefile,re,sys
 p=pefile.PE(sys.argv[1]);d=p.get_memory_mapped_image();B=p.OPTIONAL_HEADER.ImageBase
 s=int(sys.argv[2],16)-B; n=int(sys.argv[3],16)

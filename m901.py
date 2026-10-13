@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """CLI configurator for the Redragon M901P-KS (Compx 25a7:fa07 / 25a7:fa08) on Linux.
 
 Protocol reverse-engineered from the vendor Windows driver (OemDrv.exe), see PROGRESS.md.

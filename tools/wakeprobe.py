@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 import os, fcntl, select, time, sys
 def chk(b): return (0x55 - sum(b)) & 0xff
 def ioc(d, nr, size): return (d << 30) | (size << 16) | (ord('H') << 8) | nr

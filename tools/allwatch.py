@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 import os, select, time, sys
 # log every HID report from both receiver interfaces (plain motion is only counted)
 dur = float(sys.argv[1]) if len(sys.argv) > 1 else 120

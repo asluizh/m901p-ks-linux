@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 import os, select, time, sys
 dur = float(sys.argv[1]) if len(sys.argv) > 1 else 120
 fd = os.open('/dev/hidraw1', os.O_RDONLY | os.O_NONBLOCK)

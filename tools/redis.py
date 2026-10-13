@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 # small capstone helper for reversing OemDrv.exe
 import sys, pefile, capstone, struct, re
 P = pefile.PE(sys.argv[1]); BASE = P.OPTIONAL_HEADER.ImageBase
