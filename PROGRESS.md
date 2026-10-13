@@ -120,3 +120,5 @@
 - So the underside button = 2-PROFILE TOGGLE (A home 0x1b00, B home 0x2500), each a full config (rate, DPI, keys, 0xa0).
   No evidence of 7 on-board profiles; driver never sends a profile command. Currently active: B (125 Hz).
 - Next tests: (1) measure motion report rate per profile (read-only); (2) per-profile keymap persistence (needs a write).
+- TEST 1 DONE (tools/ratemeter.py): profile B (code 8) = steady 130-132 reports/s ; profile A (code 1) = 656-808/s while
+  moving. Polling-rate decode CONFIRMED. Profile currently active after test: B (125 Hz).
